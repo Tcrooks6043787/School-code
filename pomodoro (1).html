@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>FocusFlow – Pomodoro (No Dependencies)</title>
+<style>
+  :root{
+    --bg: #fafafa; --card:#ffffff; --text:#1f2937; --muted:#6b7280; --ring:#111827;
+    --focus:#fb923c; --focus-ring:#f97316;
+    --short:#34d399; --short-ring:#10b981;
+    --long:#818cf8; --long-ring:#6366f1;
+    --border: rgba(0,0,0,.06);
+  }
+  .dark{
+    --bg:#0b0b0d; --card:#0f1115; --text:#e5e7eb; --muted:#9ca3af; --ring:#f3f4f6;
+    --border: rgba(255,255,255,.12);
+  }
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial}
+  .wrap{max-width:960px;margin:0 auto;padding:24px}
+  .row{display:flex;gap:12px;align-items:center}
+  .space{justify-content:space-between}
+  .chip{border:1px solid var(--border);padding:3px 8px;border-radius:999px;font-size:12px;opacity:.9}
+  .btn{border:1px solid var(--border);background:var(--card);color:var(--text);padding:10px 14px;border-radius:14px;cursor:pointer}
+  .btn:hover{filter:brightness(1.05)}
+  .btn.primary{background:#111827;color:#fff;border-color:#111827}
+  .btn.alt{background:var(--card)}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:22px;padding:24px}
+  .grid{display:grid;gap:12px}
+  @media(min-width:700px){.grid{grid-template-columns:repeat(3,1fr)}}
+
+  /* ring */
+  .ring{display:block;margin:0 auto}
+  .center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;user-select:none}
+
+  .muted{color:var(--muted)}
+  .kbd{background:#111827;color:#fff;border-radius:6px;padding:2px 6px;font-size:12px}
+  .toggle{display:inline-flex;align-items:center;gap:8px}
+  .toggle input{width:16px;height:16px}
+  .modeTab{padding:8px 14px;border-radius:16px;border:1px solid var(--border);background:var(--card);cursor:pointer}
+  .modeTab.active{background:#111827;color:#fff;border-color:#111827}
+  .hint{font-size:14px}
+  .foot{font-size:12px;opacity:.85;margin-top:14px}
+</style>
+</head>
+<body>
+<div id="app" class="wrap">
+  <header class="row space">
+    <div class="row">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M6 13l4 4L18 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <h1 style="margin:0 8px 0 6px;font-size:22px;">FocusFlow</h1>
+      <span class="chip">v1</span>
+    </div>
+    <div class="row">
+      <button id="darkBtn" class="btn alt" aria-label="Toggle dark mode">Dark</button>
+      <button id="muteBtn" class="btn alt" aria-label="Toggle sound">Sound: Off</button>
+      <label class="toggle btn alt" style="cursor:pointer">
+        <input id="notifToggle" type="checkbox" aria-label="Enable notifications">
+        <span>Notifications</span>
+      </label>
+    </div>
+  </header>
+
+  <main style="margin-top:18px">
+    <!-- Mode tabs -->
+    <div class="row" style="justify-content:center;margin-bottom:16px">
+      <button class="modeTab active" data-mode="focus">🎯 Focus</button>
+      <button class="modeTab" data-mode="short">☕ Short</button>
+      <button class="modeTab" data-mode="long">🍃 Long</button>
+    </div>
+
+    <section class="card" id="timerCard">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:16px;position:relative">
+        <!-- Progress ring -->
+        <div style="position:relative;width:320px;height:320px">
+          <svg class="ring" width="320" height="320" viewBox="0 0 320 320">
+            <circle cx="160" cy="160" r="130" stroke-width="12" stroke="rgba(128,128,128,.2)" fill="none"/>
+            <circle id="ringActive" cx="160" cy="160" r="130" stroke-width="12" stroke-linecap="round" fill="none"
+                    stroke="currentColor" style="transform:rotate(-90deg);transform-origin:160px 160px;stroke-dasharray:816;stroke-dashoffset:0;transition:stroke-dashoffset .2s linear"></circle>
+          </svg>
+          <div class="center">
+            <div id="clock" style="font-size:68px;font-weight:700;letter-spacing:1px">25:00</div>
+            <div id="modeLabel" class="muted" style="margin-top:6px">Focus</div>
+          </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="row" style="flex-wrap:wrap;justify-content:center;gap:10px">
+          <button id="startBtn" class="btn primary">Start</button>
+          <button id="resetBtn" class="btn alt">Reset</button>
+          <button id="skipBtn" class="btn alt">Skip</button>
+          <label class="toggle btn alt">
+            <input id="autoToggle" type="checkbox" />
+            <span>Auto-start next</span>
+          </label>
+        </div>
+
+        <!-- Stats -->
+        <div class="grid" style="width:100%;margin-top:8px">
+          <div class="card">
+            <div class="muted">Tip</div>
+            <div id="tip" class="hint" style="margin-top:6px"></div>
+          </div>
+          <div class="card">
+            <div class="muted">Today</div>
+            <div style="margin-top:6px"><span id="todayCount" style="font-weight:600;font-size:18px">0</span> pomodoros</div>
+          </div>
+          <div class="card">
+            <div class="muted">Cycle</div>
+            <div style="margin-top:6px"><span id="cycleNum" style="font-weight:600;font-size:18px">1</span> / <span id="cycleTotal">4</span> to long break</div>
+          </div>
+        </div>
+
+        <details style="width:100%;margin-top:6px">
+          <summary class="muted" style="cursor:pointer">Keyboard shortcuts</summary>
+          <div class="grid" style="grid-template-columns:repeat(3,1fr);margin-top:8px;gap:8px">
+            <div class="card row space"><span>Start/Pause</span><span class="kbd">Space</span></div>
+            <div class="card row space"><span>Reset</span><span class="kbd">R</span></div>
+            <div class="card row space"><span>Skip</span><span class="kbd">S</span></div>
+            <div class="card row space"><span>Focus / Short / Long</span><span class="kbd">1 / 2 / 3</span></div>
+            <div class="card row space"><span>Auto-start toggle</span><span class="kbd">A</span></div>
+            <div class="card row space"><span>Dark mode</span><span class="kbd">D</span></div>
+          </div>
+        </details>
+      </div>
+      <div class="foot">Built for focus • Works offline in a tab • Timings: 25:00 Focus, 05:00 Short, 15:00 Long</div>
+    </section>
+  </main>
+</div>
+
+<script>
+/* ---------- State & constants ---------- */
+const DURATIONS = { focus: 25*60*1000, short: 5*60*1000, long: 15*60*1000 };
+const MODE_META = {
+  focus: { label:"Focus", color:"var(--focus-ring)", bg:"#fff" },
+  short: { label:"Short Break", color:"var(--short-ring)", bg:"#fff" },
+  long:  { label:"Long Break",  color:"var(--long-ring)",  bg:"#fff" }
+};
+const STORAGE = { settings: "ff_settings_v1", progress: "ff_progress_v1" };
+const todayStr = () => new Date().toISOString().slice(0,10);
+const microcopy = {
+  focus:["Deep work mode engaged.","You got this—one task at a time.","Phones face down, brilliance face up.","Tiny steps, big progress."],
+  short:["Stretch, sip, breathe.","Blink and hydrate.","Nice! Quick reset time.","Look 20ft away for 20s."],
+  long:["Great run—take a proper break.","Walk, snack, reset posture.","Give your brain a breather.","You're building a habit."]
+};
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)] }
+
+let settings = load(STORAGE.settings, {
+  autoStartNext:false, mute:true, notifications:false, darkMode:window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches, cyclesForLong:4
+});
+let progress = load(STORAGE.progress, { date: todayStr(), pomodoros:0 });
+if(progress.date !== todayStr()){ progress = { date: todayStr(), pomodoros:0 }; save(STORAGE.progress, progress); }
+
+let mode = "focus";               // "focus" | "short" | "long"
+let remaining = DURATIONS[mode];
+let running = false;
+let targetEnd = null;
+let completedFocusCount = 0;
+
+/* ---------- Elements ---------- */
+const ringEl = document.getElementById("ringActive");
+const clockEl = document.getElementById("clock");
+const modeLabelEl = document.getElementById("modeLabel");
+const tipEl = document.getElementById("tip");
+const todayCountEl = document.getElementById("todayCount");
+const cycleNumEl = document.getElementById("cycleNum");
+const cycleTotalEl = document.getElementById("cycleTotal");
+
+const startBtn = document.getElementById("startBtn");
+const resetBtn = document.getElementById("resetBtn");
+const skipBtn = document.getElementById("skipBtn");
+const autoToggle = document.getElementById("autoToggle");
+const darkBtn = document.getElementById("darkBtn");
+const muteBtn = document.getElementById("muteBtn");
+const notifToggle = document.getElementById("notifToggle");
+
+const modeTabs = Array.from(document.querySelectorAll(".modeTab"));
+
+/* ---------- Init UI ---------- */
+cycleTotalEl.textContent = settings.cyclesForLong;
+autoToggle.checked = settings.autoStartNext;
+notifToggle.checked = settings.notifications;
+document.documentElement.classList.toggle("dark", settings.darkMode);
+muteBtn.textContent = `Sound: ${settings.mute ? "Off" : "On"}`;
+render();
+
+/* ---------- Event handlers ---------- */
+startBtn.addEventListener("click", toggleRun);
+resetBtn.addEventListener("click", reset);
+skipBtn.addEventListener("click", skip);
+
+darkBtn.addEventListener("click", () => {
+  settings.darkMode = !settings.darkMode;
+  document.documentElement.classList.toggle("dark", settings.darkMode);
+  save(STORAGE.settings, settings);
+});
+
+muteBtn.addEventListener("click", () => {
+  settings.mute = !settings.mute;
+  muteBtn.textContent = `Sound: ${settings.mute ? "Off" : "On"}`;
+  save(STORAGE.settings, settings);
+});
+
+notifToggle.addEventListener("change", async (e) => {
+  settings.notifications = e.target.checked;
+  save(STORAGE.settings, settings);
+  if(settings.notifications && "Notification" in window && Notification.permission === "default"){
+    try{ await Notification.requestPermission(); }catch{}
+  }
+});
+
+autoToggle.addEventListener("change", e => {
+  settings.autoStartNext = e.target.checked;
+  save(STORAGE.settings, settings);
+});
+
+modeTabs.forEach(btn => btn.addEventListener("click", () => changeMode(btn.dataset.mode)));
+
+document.addEventListener("keydown", (e) => {
+  const tag = (e.target.tagName || "").toLowerCase();
+  if(tag === "input" || tag === "textarea") return;
+  if(e.code === "Space"){ e.preventDefault(); toggleRun(); }
+  else if(e.key.toLowerCase() === "r") reset();
+  else if(e.key.toLowerCase() === "s") skip();
+  else if(e.key === "1") changeMode("focus");
+  else if(e.key === "2") changeMode("short");
+  else if(e.key === "3") changeMode("long");
+  else if(e.key.toLowerCase() === "a") { settings.autoStartNext = !settings.autoStartNext; autoToggle.checked = settings.autoStartNext; save(STORAGE.settings, settings); }
+  else if(e.key.toLowerCase() === "d") { settings.darkMode = !settings.darkMode; document.documentElement.classList.toggle("dark", settings.darkMode); save(STORAGE.settings, settings); }
+});
+
+/* ---------- Timer loop ---------- */
+let intervalId = null;
+function startTick(){
+  stopTick();
+  intervalId = setInterval(() => {
+    if(!running || targetEnd === null) return;
+    const ms = Math.max(0, targetEnd - Date.now());
+    remaining = ms;
+    updateClock();
+    if(ms <= 0){ stopTick(); completeSession(); }
+  }, 200);
+}
+function stopTick(){ if(intervalId) clearInterval(intervalId); intervalId = null; }
+
+/* ---------- Actions ---------- */
+function toggleRun(){
+  if(running){
+    running = false;
+    if(targetEnd) remaining = Math.max(0, targetEnd - Date.now());
+    targetEnd = null;
+    startBtn.textContent = "Start";
+  }else{
+    running = true;
+    targetEnd = Date.now() + remaining;
+    startBtn.textContent = "Pause";
+    startTick();
+  }
+  document.title = (running ? "⏱️ " : "") + `${formatTime(remaining)} • ${MODE_META[mode].label}`;
+}
+function reset(){
+  running = false;
+  targetEnd = null;
+  remaining = DURATIONS[mode];
+  startBtn.textContent = "Start";
+  updateClock();
+  document.title = `${formatTime(remaining)} • ${MODE_META[mode].label}`;
+}
+function changeMode(next){
+  mode = next;
+  modeTabs.forEach(b => b.classList.toggle("active", b.dataset.mode === next));
+  running = false; targetEnd = null;
+  remaining = DURATIONS[next];
+  startBtn.textContent = "Start";
+  render();
+}
+function skip(){
+  running = false;
+  targetEnd = null;
+  remaining = 0;
+  completeSession();
+}
+
+/* ---------- On complete ---------- */
+function completeSession(){
+  if(!settings.mute) chime();
+  if(mode === "focus"){
+    progress.pomodoros += 1; progress.date = todayStr(); save(STORAGE.progress, progress);
+    completedFocusCount++;
+    const nextIsLong = (completedFocusCount % settings.cyclesForLong) === 0;
+    const next = nextIsLong ? "long" : "short";
+    routeTo(next, nextIsLong ? "Long break time (15:00)." : "Short break time (05:00).");
+  }else{
+    routeTo("focus", "Back to focus (25:00).");
+  }
+}
+function routeTo(nextMode, note){
+  mode = nextMode;
+  modeTabs.forEach(b => b.classList.toggle("active", b.dataset.mode === nextMode));
+  remaining = DURATIONS[nextMode];
+  running = settings.autoStartNext;
+  targetEnd = running ? Date.now() + remaining : null;
+  startBtn.textContent = running ? "Pause" : "Start";
+  notify(nextMode === "focus" ? "Break over!" : "Focus complete!", note);
+  render();
+  if(running) startTick();
+}
+
+/* ---------- Helpers ---------- */
+function render(){
+  modeLabelEl.textContent = MODE_META[mode].label;
+  updateClock();
+  ringEl.style.color = MODE_META[mode].color;
+  tipEl.textContent = pick(microcopy[mode]);
+  todayCountEl.textContent = progress.pomodoros;
+  cycleNumEl.textContent = (completedFocusCount % settings.cyclesForLong) + 1;
+  document.title = `${formatTime(remaining)} • ${MODE_META[mode].label}`;
+}
+function updateClock(){
+  clockEl.textContent = formatTime(remaining);
+  const total = DURATIONS[mode];
+  const circ = 2 * Math.PI * 130; // r=130
+  const pct = 1 - (remaining / total);
+  ringEl.style.strokeDasharray = String(circ);
+  ringEl.style.strokeDashoffset = String((1 - pct) * circ);
+}
+function formatTime(ms){
+  const s = Math.max(0, Math.floor(ms/1000));
+  const m = Math.floor(s/60), sec = s % 60;
+  return `${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
+}
+function chime(volume=0.2){
+  try{
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const now = ctx.currentTime;
+    [659.25, 880, 987.77].forEach((f,i)=>{
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = "sine"; o.frequency.value = f;
+      g.gain.setValueAtTime(0, now + i*0.12);
+      g.gain.linearRampToValueAtTime(volume, now + i*0.12 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + i*0.12 + 0.35);
+      o.connect(g).connect(ctx.destination); o.start(now + i*0.12); o.stop(now + i*0.12 + 0.4);
+    });
+  }catch{}
+}
+function notify(title, body){
+  if(!settings.notifications || !("Notification" in window)) return;
+  if(Notification.permission === "granted"){
+    try{ new Notification(title, { body }); }catch{}
+  }
+}
+function load(k, fallback){
+  try{ const raw = localStorage.getItem(k); return raw ? JSON.parse(raw) : fallback; }catch{ return fallback; }
+}
+function save(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch{} }
+</script>
+</body>
+</html>
